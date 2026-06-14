@@ -1,58 +1,126 @@
-# ============================================================================
-#  CODE RED - EMERGENCY PROTOCOL
-#  Instant wipe of your Claude Code data. NO confirmation. NO undo.
-#
-#  Deletes installed skills (except a keep-list) and the .claude data folders
-#  (projects/memory, sessions, caches, backups). Anything OUTSIDE ~/.claude is
-#  never touched. The skill self-destructs as the final step.
-# ============================================================================
+<#
+.SYNOPSIS
+    Code Red - emergency wipe of Claude Code data on Windows.
 
+.DESCRIPTION
+    Deletes installed skills (except a keep-list) and the .claude data folders
+    (projects/memory, sessions, caches, backups), then self-destructs.
+    Passphrase-guarded so it cannot fire by accident. Anything OUTSIDE the
+    .claude folder is never touched.
+
+.PARAMETER Confirm
+    Exact passphrase required to actually delete: "CODE RED CONFIRM WIPE".
+    Without it (and without -DryRun) the script aborts and deletes nothing.
+
+.PARAMETER DryRun
+    List everything that WOULD be deleted, without deleting anything.
+    No passphrase needed for a dry run.
+
+.PARAMETER KeepSkills
+    Skill folder names to preserve. Default: build-site, ui-ux-pro-max.
+
+.PARAMETER ClaudeDir
+    Path to the .claude folder. Default: $env:USERPROFILE\.claude.
+
+.EXAMPLE
+    .\code-red.ps1 -DryRun
+    Preview the wipe safely.
+
+.EXAMPLE
+    .\code-red.ps1 -Confirm "CODE RED CONFIRM WIPE"
+    Perform the wipe.
+
+.EXAMPLE
+    .\code-red.ps1 -Confirm "CODE RED CONFIRM WIPE" -KeepSkills build-site,my-skill
+    Wipe but keep extra skills.
+
+.LINK
+    https://github.com/shujahmhd/code-red-emergency-protocol
+#>
 param(
-    # Safety guard: the wipe only runs if this exact passphrase is supplied.
-    [string]$Confirm
+    [string]$Confirm,
+    [switch]$DryRun,
+    [string[]]$KeepSkills = @("build-site", "ui-ux-pro-max"),
+    [string]$ClaudeDir = (Join-Path $env:USERPROFILE ".claude")
 )
 
 $ErrorActionPreference = "SilentlyContinue"
-
 $PASSPHRASE = "CODE RED CONFIRM WIPE"
+$self       = "code-red-emergency-protocol"
+
+function Write-Line($msg, $color = "Gray") { Write-Host $msg -ForegroundColor $color }
+
+Write-Line ""
+Write-Line "  ####  ###  ###  ####    ###  ####  ###  " Red
+Write-Line "  #    # # # #  # #       #  # #     # # # " Red
+Write-Line "  ###  # # # #  # ###     ###  ###   # # # " Red
+Write-Line "  #    #   # #  # #       # #  #     #   # " Red
+Write-Line "  ####  ### ###  ####    #  # ####  ### # " Red
+Write-Line "  EMERGENCY PROTOCOL - Claude Code wipe" Red
+Write-Line ""
+
+# ---- Build the deletion plan ----------------------------------------------
+$skillsDir = Join-Path $ClaudeDir "skills"
+$dataItems = @("projects", "sessions", "session-env", "shell-snapshots", "backups", ".last-cleanup")
+
+$plan = New-Object System.Collections.Generic.List[string]
+
+Get-ChildItem $skillsDir -Directory -Force |
+    Where-Object { $KeepSkills -notcontains $_.Name -and $_.Name -ne $self } |
+    ForEach-Object { $plan.Add($_.FullName) }
+
+foreach ($item in $dataItems) {
+    $p = Join-Path $ClaudeDir $item
+    if (Test-Path $p) { $plan.Add($p) }
+}
+
+# Self-destruct goes LAST.
+$selfPath = Join-Path $skillsDir $self
+$selfQueued = Test-Path $selfPath
+
+Write-Line "Target .claude folder : $ClaudeDir"
+Write-Line "Skills preserved      : $($KeepSkills -join ', ')"
+Write-Line "Items queued          : $($plan.Count + [int]$selfQueued)" Yellow
+Write-Line ""
+
+if ($plan.Count -eq 0 -and -not $selfQueued) {
+    Write-Line "Nothing to delete. Exiting." Green
+    exit 0
+}
+
+# ---- Dry run: list and exit ------------------------------------------------
+if ($DryRun) {
+    Write-Line "DRY RUN - nothing will be deleted:" Cyan
+    foreach ($t in $plan) { Write-Line "  WOULD DELETE: $t" }
+    if ($selfQueued) { Write-Line "  WOULD DELETE: $selfPath  (self-destruct, last)" }
+    Write-Line ""
+    Write-Line "Re-run with -Confirm `"$PASSPHRASE`" to perform the wipe." Cyan
+    exit 0
+}
+
+# ---- Passphrase guard ------------------------------------------------------
 if ($Confirm -ne $PASSPHRASE) {
-    Write-Host "Code Red ABORTED - passphrase required." -ForegroundColor Yellow
-    Write-Host "Nothing was deleted. To actually wipe, re-run with:" -ForegroundColor Yellow
-    Write-Host "  -Confirm `"$PASSPHRASE`"" -ForegroundColor Yellow
+    Write-Line "ABORTED - passphrase required. Nothing was deleted." Yellow
+    Write-Line "To wipe, re-run with:  -Confirm `"$PASSPHRASE`"" Yellow
+    Write-Line "To preview safely, re-run with:  -DryRun" Yellow
     exit 1
 }
 
-# ---- CONFIG: edit to taste ------------------------------------------------
-$claude     = Join-Path $env:USERPROFILE ".claude"   # your Claude data folder
-$keepSkills = @("build-site", "ui-ux-pro-max")       # skills to PRESERVE
-$self       = "code-red-emergency-protocol"          # this skill's folder name
-# ---------------------------------------------------------------------------
-
-Write-Host "=== CODE RED: wiping Claude data ===" -ForegroundColor Red
-
-# 1. Delete non-kept skills (leave self for the very end so this script keeps running).
-Get-ChildItem (Join-Path $claude "skills") -Directory -Force |
-    Where-Object { $keepSkills -notcontains $_.Name -and $_.Name -ne $self } |
-    ForEach-Object {
-        Write-Host "  deleting skill: $($_.Name)"
-        Remove-Item $_.FullName -Recurse -Force
-    }
-
-# 2. Delete Claude data folders (projects/memory, sessions, backups, caches).
-$wipe = @("projects", "sessions", "session-env", "shell-snapshots", "backups", ".last-cleanup")
-foreach ($item in $wipe) {
-    $p = Join-Path $claude $item
-    if (Test-Path $p) {
-        Write-Host "  deleting: $item"
-        Remove-Item $p -Recurse -Force
-    }
+# ---- Execute ---------------------------------------------------------------
+$deleted = 0
+foreach ($t in $plan) {
+    Remove-Item $t -Recurse -Force
+    if (-not (Test-Path $t)) { Write-Line "  deleted: $t"; $deleted++ }
+    else { Write-Line "  FAILED : $t" Yellow }
 }
 
-Write-Host "Preserved skills: $($keepSkills -join ', ')"
+# Self-destruct last (script is already in memory, safe on Windows).
+if ($selfQueued) {
+    Write-Line "  deleting (self-destruct): $selfPath"
+    Remove-Item $selfPath -Recurse -Force
+    $deleted++
+}
 
-# 3. Self-destruct: delete this skill's own folder LAST. The script is already
-#    loaded in memory, so removing the file mid-execution is safe on Windows.
-Write-Host "  deleting skill: $self (self-destruct)"
-Remove-Item (Join-Path $claude "skills\$self") -Recurse -Force
-
-Write-Host "=== CODE RED complete - this skill has removed itself ===" -ForegroundColor Red
+Write-Line ""
+Write-Line "=== CODE RED complete: $deleted item(s) removed ===" Red
+Write-Line "Preserved: $($KeepSkills -join ', ') (and everything outside $ClaudeDir)"
