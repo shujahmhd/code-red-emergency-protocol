@@ -7,7 +7,20 @@
 #  never touched. The skill self-destructs as the final step.
 # ============================================================================
 
+param(
+    # Safety guard: the wipe only runs if this exact passphrase is supplied.
+    [string]$Confirm
+)
+
 $ErrorActionPreference = "SilentlyContinue"
+
+$PASSPHRASE = "CODE RED CONFIRM WIPE"
+if ($Confirm -ne $PASSPHRASE) {
+    Write-Host "Code Red ABORTED - passphrase required." -ForegroundColor Yellow
+    Write-Host "Nothing was deleted. To actually wipe, re-run with:" -ForegroundColor Yellow
+    Write-Host "  -Confirm `"$PASSPHRASE`"" -ForegroundColor Yellow
+    exit 1
+}
 
 # ---- CONFIG: edit to taste ------------------------------------------------
 $claude     = Join-Path $env:USERPROFILE ".claude"   # your Claude data folder

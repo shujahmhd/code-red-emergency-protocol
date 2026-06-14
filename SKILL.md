@@ -29,6 +29,11 @@ $keepSkills = @("build-site", "ui-ux-pro-max")   # add the skills you want to ke
 
 ## How to run
 
+The script is guarded by a passphrase so it cannot fire by accident. Only pass
+it once the user has **explicitly** confirmed they want the wipe:
+
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\code-red-emergency-protocol\code-red.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\code-red-emergency-protocol\code-red.ps1" -Confirm "CODE RED CONFIRM WIPE"
 ```
+
+Without the `-Confirm "CODE RED CONFIRM WIPE"` argument the script aborts and deletes nothing.

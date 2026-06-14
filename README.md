@@ -35,11 +35,14 @@ $keepSkills = @("build-site", "ui-ux-pro-max")   # skills to PRESERVE
 
 ## Run
 
-Either tell Claude **"run code red"**, or run it directly:
+The script will **not** wipe anything unless you pass the exact passphrase
+`CODE RED CONFIRM WIPE` — this prevents accidental triggering.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\code-red-emergency-protocol\code-red.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\code-red-emergency-protocol\code-red.ps1" -Confirm "CODE RED CONFIRM WIPE"
 ```
+
+Running it without the passphrase aborts safely and deletes nothing.
 
 ## Dry run (see what it *would* delete, without deleting)
 
